@@ -1,10 +1,11 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import axios from "axios"
-import { jsPDF } from "jspdf"
-import "jspdf-autotable"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 const UserDashboard = () => {
   const [user, setUser] = useState(JSON.parse(localStorage.getItem("user") || "{}"))
@@ -59,7 +60,6 @@ const UserDashboard = () => {
         },
       )
 
-      // Update the task in the local state
       setTasks(tasks.map((task) => (task._id === taskId ? { ...task, status: newStatus } : task)))
     } catch (err) {
       setError(err.response?.data?.message || "Failed to update task status")
@@ -72,25 +72,22 @@ const UserDashboard = () => {
 
       const response = await axios.get("http://localhost:5000/api/tasks/report", {
         headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
       })
 
       const tasks = response.data.data.tasks
 
       const doc = new jsPDF()
 
-      // Add title
       doc.setFontSize(18)
       doc.text("Task Report", 14, 22)
 
-      // Add date
       doc.setFontSize(11)
       doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30)
 
-      // Add user info
       doc.text(`User: ${user.name}`, 14, 38)
 
-      // Create table
-      const tableColumn = ["Title", "Description", "Deadline", "Assigned To", "Status"]
+      const tableColumn = ["Title", "Description", "Deadline", "Status"]
       const tableRows = []
 
       tasks.forEach((task) => {
@@ -98,30 +95,29 @@ const UserDashboard = () => {
           task.title,
           task.description.substring(0, 30) + (task.description.length > 30 ? "..." : ""),
           new Date(task.deadline).toLocaleDateString(),
-          task.assignedTo.name,
           task.status,
         ]
         tableRows.push(taskData)
       })
 
-      doc.autoTable({
+      autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
         startY: 45,
         styles: { fontSize: 10 },
         columnStyles: {
-          0: { cellWidth: 30 },
-          1: { cellWidth: 50 },
-          2: { cellWidth: 30 },
+          0: { cellWidth: 40 },
+          1: { cellWidth: 70 },
+          2: { cellWidth: 40 },
           3: { cellWidth: 40 },
-          4: { cellWidth: 30 },
         },
         headStyles: { fillColor: [66, 139, 202] },
       })
 
       doc.save(`task-report-${new Date().toISOString().split("T")[0]}.pdf`)
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to generate PDF")
+      console.error("PDF generation error:", err)
+      setError("Failed to generate PDF. Please try again.")
     }
   }
 
@@ -255,11 +251,16 @@ const UserDashboard = () => {
                             value={task.status}
                             onChange={(e) => handleStatusChange(task._id, e.target.value)}
                             className="p-1 border rounded-md text-sm"
+                            disabled={task.status === "cancelled"}
                           >
-                            <option value="pending">Pending</option>
+                            <option
+                              value="pending"
+                              disabled={task.status === "in-progress" || task.status === "completed"}
+                            >
+                              Pending
+                            </option>
                             <option value="in-progress">In Progress</option>
                             <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
                           </select>
                         </td>
                       </tr>

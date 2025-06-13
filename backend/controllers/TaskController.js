@@ -10,6 +10,7 @@ exports.getAllTasks = async (req, res) => {
     if (req.user.role !== "admin") {
       query.assignedTo = req.user._id
     }
+    // For admins, show all tasks (no filter by createdBy)
 
     // Search functionality
     if (req.query.search) {
@@ -132,11 +133,31 @@ exports.updateTask = async (req, res) => {
     }
 
     // Check if user is authorized to update this task
-    if (req.user.role !== "admin" && task.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        status: "error",
-        message: "You are not authorized to update this task",
-      })
+    // Admins can update any task
+    // Regular users can only update status of tasks assigned to them
+    if (req.user.role !== "admin") {
+      if (task.assignedTo.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          status: "error",
+          message: "You are not authorized to update this task",
+        })
+      }
+
+      // Regular users can only update status
+      if (Object.keys(req.body).some((key) => key !== "status")) {
+        return res.status(403).json({
+          status: "error",
+          message: "You can only update the status of this task",
+        })
+      }
+
+      // Regular users can only set status to in-progress or completed
+      if (status && !["in-progress", "completed"].includes(status)) {
+        return res.status(403).json({
+          status: "error",
+          message: "You can only set status to in-progress or completed",
+        })
+      }
     }
 
     // If assignedTo is being updated, check if user exists
@@ -150,17 +171,15 @@ exports.updateTask = async (req, res) => {
       }
     }
 
-    const updatedTask = await Task.findByIdAndUpdate(
-      req.params.id,
-      {
-        title,
-        description,
-        deadline,
-        assignedTo,
-        status,
-      },
-      { new: true, runValidators: true },
-    )
+    // Create update object with only the fields that are provided
+    const updateData = {}
+    if (title) updateData.title = title
+    if (description) updateData.description = description
+    if (deadline) updateData.deadline = deadline
+    if (assignedTo) updateData.assignedTo = assignedTo
+    if (status) updateData.status = status
+
+    const updatedTask = await Task.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true })
       .populate("assignedTo", "name email")
       .populate("createdBy", "name")
 
@@ -188,8 +207,8 @@ exports.deleteTask = async (req, res) => {
       })
     }
 
-    // Check if user is authorized to delete this task
-    if (req.user.role !== "admin" && task.createdBy.toString() !== req.user._id.toString()) {
+    // Only admins can delete tasks
+    if (req.user.role !== "admin") {
       return res.status(403).json({
         status: "error",
         message: "You are not authorized to delete this task",
@@ -219,6 +238,7 @@ exports.getTasksForReport = async (req, res) => {
     if (req.user.role !== "admin") {
       query.assignedTo = req.user._id
     }
+    // For admins, show all tasks (no filter by createdBy)
 
     // Status filter for report
     if (req.query.status && req.query.status !== "all") {
