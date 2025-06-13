@@ -2,6 +2,9 @@
 
 The Task Management System is a full-stack web application designed to simplify task assignment, tracking, and management for teams. It offers secure authentication, intuitive dashboards, and role-based features for users and admins, it enhances productivity across devices, from desktops to smartphones.
 
+## 🎥 Demo Video
+https://mysliit-my.sharepoint.com/:f:/g/personal/it22584472_my_sliit_lk/ElmKDYnSeV9EuIwXBXnscQUBfnGPV08Cj0zZDZOcrdgOWQ?e=QM3Rzl
+
 ## ✨ Features
 
 ### 🔐 Authentication
