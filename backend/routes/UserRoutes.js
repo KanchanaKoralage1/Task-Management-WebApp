@@ -1,120 +1,40 @@
-const express = require('express');
-const router = express.Router();
-const User = require('../models/User');
-const { signup, login } = require('../controllers/authController');
-const { protect, restrictTo } = require('../middlewares/AuthMiddleware');
+const express = require("express")
+const router = express.Router()
+const User = require("../models/User")
+const {
+  signup,
+  verifyEmail,
+  login,
+  googleLogin,
+  forgotPassword,
+  resetPassword,
+} = require("../controllers/authController")
+const { protect, restrictTo } = require("../middlewares/AuthMiddleware")
+const {
+  getAllUsers,
+  getUser,
+  updateUser,
+  deleteUser,
+  getProfile,
+  updateProfile,
+} = require("../controllers/UserController")
 
-// Public routes
-router.post('/signup', signup);
-router.post('/login', login);
+// Public auth routes
+router.post("/signup", signup)
+router.post("/verify-email", verifyEmail)
+router.post("/login", login)
+router.post("/google-login", googleLogin)
+router.post("/forgot-password", forgotPassword)
+router.post("/reset-password", resetPassword)
 
 // Protected routes
-router.get('/profile', protect, async (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    data: { user: req.user }
-  });
-});
+router.get("/profile", protect, getProfile)
+router.patch("/update-profile", protect, updateProfile)
 
 // Admin only routes
-router.get('/all-users', protect, restrictTo('admin'), async (req, res) => {
-  try {
-    const users = await User.find().select('-password');
-    res.status(200).json({
-      status: 'success',
-      data: { users }
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-});
+router.get("/all-users", protect, restrictTo("admin"), getAllUsers)
+router.get("/user/:id", protect, restrictTo("admin"), getUser)
+router.patch("/user/:id", protect, restrictTo("admin"), updateUser)
+router.delete("/user/:id", protect, restrictTo("admin"), deleteUser)
 
-
-// Get specific user
-router.get('/user/:id', protect, restrictTo('admin'), async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id).select('-password');
-    if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'User not found'
-      });
-    }
-    res.status(200).json({
-      status: 'success',
-      data: { user }
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-});
-
-// Update user
-router.patch('/user/:id', protect, restrictTo('admin'), async (req, res) => {
-  try {
-    const { password, ...updateData } = req.body; // Prevent password update through this route
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    ).select('-password');
-
-    if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'User not found'
-      });
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: { user }
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-});
-
-// Delete user
-router.delete('/user/:id', protect, restrictTo('admin'), async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    
-    if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'User not found'
-      });
-    }
-
-    if (user.role === 'admin') {
-      return res.status(403).json({
-        status: 'error',
-        message: 'Admin accounts cannot be deleted through this route'
-      });
-    }
-
-    await User.findByIdAndDelete(req.params.id);
-    
-    res.status(204).json({
-      status: 'success',
-      data: null
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-});
-
-module.exports = router;
+module.exports = router
