@@ -56,6 +56,7 @@ const Signup = () => {
 
   const handleGoogleSignupSuccess = async (credentialResponse) => {
     try {
+      console.log("Google signup success:", credentialResponse)
       const response = await axios.post("http://localhost:5000/api/users/google-login", {
         token: credentialResponse.credential,
       })
@@ -66,6 +67,7 @@ const Signup = () => {
       // Navigate to user dashboard (Google users are always regular users)
       navigate("/dashboard")
     } catch (err) {
+      console.error("Google signup error:", err)
       setError(err.response?.data?.message || "Google signup failed")
     }
   }
@@ -129,8 +131,12 @@ const Signup = () => {
           <div className="flex justify-center">
             <GoogleLogin
               onSuccess={handleGoogleSignupSuccess}
-              onError={() => setError("Google signup failed")}
+              onError={() => {
+                console.error("Google signup failed")
+                setError("Google signup failed")
+              }}
               useOneTap
+              flow="implicit"
             />
           </div>
         </div>

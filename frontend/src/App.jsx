@@ -8,8 +8,16 @@ import ProtectedRoute from "./components/ProtectedRoute"
 import AdminRoute from "./components/AdminRoute"
 
 const App = () => {
+  // Log the client ID being used to help with debugging
+  const clientId = "21099393576-e6mg5qlctsa1mdaj4bhv65ervcmn2a5m.apps.googleusercontent.com"
+  console.log("Using Google OAuth Client ID:", clientId)
+
   return (
-    <GoogleOAuthProvider clientId="21099393576-e6mg5qlctsa1mdaj4bhv65ervcmn2a5m.apps.googleusercontent.com">
+    <GoogleOAuthProvider
+      clientId={clientId}
+      onScriptLoadError={(err) => console.error("Google script load error:", err)}
+      onScriptLoadSuccess={() => console.log("Google script loaded successfully")}
+    >
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />

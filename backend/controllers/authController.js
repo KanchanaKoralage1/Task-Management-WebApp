@@ -155,6 +155,8 @@ exports.googleLogin = async (req, res) => {
   try {
     const { token } = req.body
 
+    console.log("Received Google token:", token)
+
     // Verify Google token
     const ticket = await googleClient.verifyIdToken({
       idToken: token,
@@ -162,6 +164,8 @@ exports.googleLogin = async (req, res) => {
     })
 
     const payload = ticket.getPayload()
+    console.log("Google payload:", payload)
+
     const { email, name, picture } = payload
 
     // Check if user exists
@@ -175,6 +179,7 @@ exports.googleLogin = async (req, res) => {
         password: crypto.randomBytes(16).toString("hex"), // Random password
         profilePicture: picture,
         googleId: payload.sub,
+        emailVerified: true, // Google accounts are verified
       })
     }
 
@@ -186,6 +191,7 @@ exports.googleLogin = async (req, res) => {
       data: { user },
     })
   } catch (error) {
+    console.error("Google login error:", error)
     res.status(400).json({
       status: "error",
       message: error.message,

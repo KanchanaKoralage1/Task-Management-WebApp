@@ -55,9 +55,13 @@ const Login = () => {
 
   const handleGoogleLoginSuccess = async (credentialResponse) => {
     try {
+      console.log("Google login success response:", credentialResponse)
+
       const response = await axios.post("http://localhost:5000/api/users/google-login", {
         token: credentialResponse.credential,
       })
+
+      console.log("Backend response:", response.data)
 
       localStorage.setItem("token", response.data.token)
       localStorage.setItem("user", JSON.stringify(response.data.data.user))
@@ -69,6 +73,7 @@ const Login = () => {
         navigate("/dashboard")
       }
     } catch (err) {
+      console.error("Google login error details:", err.response || err)
       setError(err.response?.data?.message || "Google login failed")
     }
   }
@@ -220,10 +225,13 @@ const Login = () => {
           <p className="text-sm text-gray-600 mb-2">Or login with Google</p>
           <div className="flex justify-center">
             <GoogleLogin
-              on
-              Success={handleGoogleLoginSuccess}
-              onError={() => setError("Google login failed")}
+              onSuccess={handleGoogleLoginSuccess}
+              onError={() => {
+                console.error("Google login failed")
+                setError("Google login failed")
+              }}
               useOneTap
+              flow="implicit"
             />
           </div>
         </div>
