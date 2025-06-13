@@ -1,4 +1,7 @@
 const User = require("../models/User")
+const fs = require("fs")
+const path = require("path")
+const jwt = require("jsonwebtoken") // Import jwt module
 
 // Get all users (admin only)
 exports.getAllUsers = async (req, res) => {
@@ -145,4 +148,87 @@ exports.updateProfile = async (req, res) => {
       message: error.message,
     })
   }
+}
+
+// Update user password
+exports.updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body
+
+    // Get user with password
+    const user = await User.findById(req.user.id).select("+password")
+
+    // Check if current password is correct
+    if (!(await user.comparePassword(currentPassword))) {
+      return res.status(401).json({
+        status: "error",
+        message: "Current password is incorrect",
+      })
+    }
+
+    // Update password
+    user.password = newPassword
+    await user.save()
+
+    // Generate new token
+    const token = signToken(user._id)
+
+    res.status(200).json({
+      status: "success",
+      token,
+      message: "Password updated successfully",
+    })
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    })
+  }
+}
+
+// Upload profile picture
+exports.uploadProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        status: "error",
+        message: "No file uploaded",
+      })
+    }
+
+    // Get the server URL
+    const protocol = req.protocol
+    const host = req.get("host")
+    const baseUrl = `${protocol}://${host}`
+
+    // Create the file URL
+    const profilePicture = `${baseUrl}/uploads/${req.file.filename}`
+
+    // Update user with new profile picture URL
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { profilePicture },
+      { new: true, runValidators: true },
+    ).select("-password")
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        user,
+        profilePicture,
+      },
+    })
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    })
+  }
+}
+
+// Helper function to sign JWT token
+const signToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || "90d",
+  })
 }

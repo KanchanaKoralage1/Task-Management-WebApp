@@ -1,11 +1,11 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
 import axios from "axios"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import DeleteConfirmationModal from "../components/DeleteConfirmationModal"
 
 const AdminDashboard = () => {
   const [user, setUser] = useState(JSON.parse(localStorage.getItem("user") || "{}"))
@@ -29,15 +29,38 @@ const AdminDashboard = () => {
   })
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    itemId: null,
+    itemType: null,
+  })
   const navigate = useNavigate()
 
   useEffect(() => {
+    fetchUserProfile()
+
     if (activeTab === "users") {
       fetchUsers()
     } else if (activeTab === "tasks") {
       fetchTasks()
     }
   }, [activeTab, searchTerm, statusFilter])
+
+  const fetchUserProfile = async () => {
+    try {
+      const token = localStorage.getItem("token")
+
+      const response = await axios.get("http://localhost:5000/api/users/profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const userData = response.data.data.user
+      setUser(userData)
+      localStorage.setItem("user", JSON.stringify(userData))
+    } catch (err) {
+      console.error("Failed to fetch user profile:", err)
+    }
+  }
 
   const fetchUsers = async () => {
     try {
@@ -104,19 +127,39 @@ const AdminDashboard = () => {
     }
   }
 
-  const handleDeleteUser = async (userId) => {
-    if (!window.confirm("Are you sure you want to delete this user?")) return
+  const openDeleteModal = (id, type) => {
+    setDeleteModal({
+      isOpen: true,
+      itemId: id,
+      itemType: type,
+    })
+  }
 
+  const closeDeleteModal = () => {
+    setDeleteModal({
+      isOpen: false,
+      itemId: null,
+      itemType: null,
+    })
+  }
+
+  const handleDelete = async () => {
     try {
       const token = localStorage.getItem("token")
 
-      await axios.delete(`http://localhost:5000/api/users/user/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      fetchUsers()
+      if (deleteModal.itemType === "user") {
+        await axios.delete(`http://localhost:5000/api/users/user/${deleteModal.itemId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        fetchUsers()
+      } else if (deleteModal.itemType === "task") {
+        await axios.delete(`http://localhost:5000/api/tasks/${deleteModal.itemId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        fetchTasks()
+      }
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to delete user")
+      setError(err.response?.data?.message || `Failed to delete ${deleteModal.itemType}`)
     }
   }
 
@@ -158,22 +201,6 @@ const AdminDashboard = () => {
       setTasks(tasks.map((task) => (task._id === taskId ? { ...task, status: newStatus } : task)))
     } catch (err) {
       setError(err.response?.data?.message || "Failed to update task status")
-    }
-  }
-
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return
-
-    try {
-      const token = localStorage.getItem("token")
-
-      await axios.delete(`http://localhost:5000/api/tasks/${taskId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      fetchTasks()
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to delete task")
     }
   }
 
@@ -241,7 +268,24 @@ const AdminDashboard = () => {
         <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
           <div className="flex items-center space-x-4">
-            <span className="text-gray-600">Welcome, {user.name}</span>
+            <div className="flex items-center">
+              {user.profilePicture ? (
+                <img
+                  src={user.profilePicture || "/placeholder.svg"}
+                  alt="Profile"
+                  className="h-8 w-8 rounded-full mr-2 object-cover"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center mr-2">
+                  <span className="text-sm font-medium text-gray-600">
+                    {user.name ? user.name.charAt(0).toUpperCase() : "A"}
+                  </span>
+                </div>
+              )}
+              <Link to="/profile" className="text-gray-600 hover:text-gray-900">
+                {user.name}
+              </Link>
+            </div>
             <button
               onClick={handleLogout}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium"
@@ -298,7 +342,7 @@ const AdminDashboard = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Name
+                          User
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Email
@@ -314,7 +358,24 @@ const AdminDashboard = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {users.map((user) => (
                         <tr key={user._id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {user.profilePicture ? (
+                                <img
+                                  src={user.profilePicture || "/placeholder.svg"}
+                                  alt="Profile"
+                                  className="h-10 w-10 rounded-full mr-3 object-cover"
+                                />
+                              ) : (
+                                <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center mr-3">
+                                  <span className="text-sm font-medium text-gray-600">
+                                    {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                            </div>
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.role}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -326,7 +387,7 @@ const AdminDashboard = () => {
                             </button>
                             {user.role !== "admin" && (
                               <button
-                                onClick={() => handleDeleteUser(user._id)}
+                                onClick={() => openDeleteModal(user._id, "user")}
                                 className="text-red-600 hover:text-red-900"
                               >
                                 Delete
@@ -593,7 +654,7 @@ const AdminDashboard = () => {
                                 {task.status === "completed" && <option value="completed">Completed</option>}
                               </select>
                               <button
-                                onClick={() => handleDeleteTask(task._id)}
+                                onClick={() => openDeleteModal(task._id, "task")}
                                 className="text-red-600 hover:text-red-900"
                               >
                                 Delete
@@ -610,6 +671,15 @@ const AdminDashboard = () => {
           )}
         </div>
       </main>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={closeDeleteModal}
+        onConfirm={handleDelete}
+        title={`Delete ${deleteModal.itemType === "user" ? "User" : "Task"}`}
+        message={`Are you sure you want to delete this ${deleteModal.itemType}? This action cannot be undone.`}
+      />
     </div>
   )
 }

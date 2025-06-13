@@ -2,6 +2,7 @@ const express = require("express")
 const mongoose = require("mongoose")
 const cors = require("cors")
 const dotenv = require("dotenv")
+const path = require("path")
 const userRoutes = require("./routes/UserRoutes")
 const taskRoutes = require("./routes/TaskRoutes")
 
@@ -10,6 +11,9 @@ dotenv.config()
 const app = express()
 app.use(cors())
 app.use(express.json())
+
+// Serve static files from the uploads directory
+app.use("/uploads", express.static(path.join(__dirname, "uploads")))
 
 // MongoDB connection
 mongoose

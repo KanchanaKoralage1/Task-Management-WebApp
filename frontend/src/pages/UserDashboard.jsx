@@ -1,8 +1,7 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
 import axios from "axios"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -17,6 +16,27 @@ const UserDashboard = () => {
   const [sortBy, setSortBy] = useState("createdAt")
   const [sortOrder, setSortOrder] = useState("desc")
   const navigate = useNavigate()
+
+  useEffect(() => {
+    fetchUserProfile()
+    fetchTasks()
+  }, [searchTerm, statusFilter, sortBy, sortOrder])
+
+  const fetchUserProfile = async () => {
+    try {
+      const token = localStorage.getItem("token")
+
+      const response = await axios.get("http://localhost:5000/api/users/profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const userData = response.data.data.user
+      setUser(userData)
+      localStorage.setItem("user", JSON.stringify(userData))
+    } catch (err) {
+      console.error("Failed to fetch user profile:", err)
+    }
+  }
 
   useEffect(() => {
     fetchTasks()
@@ -127,7 +147,24 @@ const UserDashboard = () => {
         <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">User Dashboard</h1>
           <div className="flex items-center space-x-4">
-            <span className="text-gray-600">Welcome, {user.name}</span>
+            <div className="flex items-center">
+              {user.profilePicture ? (
+                <img
+                  src={user.profilePicture || "/placeholder.svg"}
+                  alt="Profile"
+                  className="h-8 w-8 rounded-full mr-2 object-cover"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center mr-2">
+                  <span className="text-sm font-medium text-gray-600">
+                    {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                  </span>
+                </div>
+              )}
+              <Link to="/profile" className="text-gray-600 hover:text-gray-900">
+                {user.name}
+              </Link>
+            </div>
             <button
               onClick={handleLogout}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium"

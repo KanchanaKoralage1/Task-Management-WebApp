@@ -17,7 +17,10 @@ const {
   deleteUser,
   getProfile,
   updateProfile,
+  updatePassword,
+  uploadProfilePicture,
 } = require("../controllers/UserController")
+const upload = require("../middlewares/uploadMiddleware")
 
 // Public auth routes
 router.post("/signup", signup)
@@ -30,6 +33,8 @@ router.post("/reset-password", resetPassword)
 // Protected routes
 router.get("/profile", protect, getProfile)
 router.patch("/update-profile", protect, updateProfile)
+router.patch("/update-password", protect, updatePassword)
+router.post("/upload-profile-picture", protect, upload.single("profileImage"), uploadProfilePicture)
 
 // Admin only routes
 router.get("/all-users", protect, restrictTo("admin"), getAllUsers)
