@@ -1,0 +1,581 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import axios from "axios"
+import { jsPDF } from "jspdf"
+import "jspdf-autotable"
+
+const AdminDashboard = () => {
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem("user") || "{}"))
+  const [users, setUsers] = useState([])
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [activeTab, setActiveTab] = useState("users")
+  const [editingUser, setEditingUser] = useState(null)
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    role: "user",
+  })
+  const [taskForm, setTaskForm] = useState({
+    title: "",
+    description: "",
+    deadline: "",
+    assignedTo: "",
+    status: "pending",
+  })
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (activeTab === "users") {
+      fetchUsers()
+    } else if (activeTab === "tasks") {
+      fetchTasks()
+    }
+  }, [activeTab, searchTerm, statusFilter])
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem("token")
+
+      const response = await axios.get("http://localhost:5000/api/users/all-users", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      setUsers(response.data.data.users)
+      setLoading(false)
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to fetch users")
+      setLoading(false)
+    }
+  }
+
+  const fetchTasks = async () => {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem("token")
+
+      const response = await axios.get(`http://localhost:5000/api/tasks?search=${searchTerm}&status=${statusFilter}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      setTasks(response.data.data.tasks)
+      setLoading(false)
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to fetch tasks")
+      setLoading(false)
+    }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem("token")
+    localStorage.removeItem("user")
+    navigate("/login")
+  }
+
+  const handleEditUser = (user) => {
+    setEditingUser(user)
+    setEditForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    })
+  }
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem("token")
+
+      await axios.patch(`http://localhost:5000/api/users/user/${editingUser._id}`, editForm, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      setEditingUser(null)
+      fetchUsers()
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update user")
+    }
+  }
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm("Are you sure you want to delete this user?")) return
+
+    try {
+      const token = localStorage.getItem("token")
+
+      await axios.delete(`http://localhost:5000/api/users/user/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      fetchUsers()
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to delete user")
+    }
+  }
+
+  const handleCreateTask = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem("token")
+
+      await axios.post("http://localhost:5000/api/tasks", taskForm, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      setTaskForm({
+        title: "",
+        description: "",
+        deadline: "",
+        assignedTo: "",
+        status: "pending",
+      })
+
+      fetchTasks()
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to create task")
+    }
+  }
+
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm("Are you sure you want to delete this task?")) return
+
+    try {
+      const token = localStorage.getItem("token")
+
+      await axios.delete(`http://localhost:5000/api/tasks/${taskId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      fetchTasks()
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to delete task")
+    }
+  }
+
+  const generatePDF = async () => {
+    try {
+      const token = localStorage.getItem("token")
+
+      const response = await axios.get("http://localhost:5000/api/tasks/report", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const tasks = response.data.data.tasks
+
+      const doc = new jsPDF()
+
+      // Add title
+      doc.setFontSize(18)
+      doc.text("Task Management Report", 14, 22)
+
+      // Add date
+      doc.setFontSize(11)
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30)
+
+      // Add admin info
+      doc.text(`Generated by: ${user.name} (Admin)`, 14, 38)
+
+      // Create table
+      const tableColumn = ["Title", "Description", "Deadline", "Assigned To", "Status"]
+      const tableRows = []
+
+      tasks.forEach((task) => {
+        const taskData = [
+          task.title,
+          task.description.substring(0, 30) + (task.description.length > 30 ? "..." : ""),
+          new Date(task.deadline).toLocaleDateString(),
+          task.assignedTo.name,
+          task.status,
+        ]
+        tableRows.push(taskData)
+      })
+
+      doc.autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 45,
+        styles: { fontSize: 10 },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 50 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 40 },
+          4: { cellWidth: 30 },
+        },
+        headStyles: { fillColor: [66, 139, 202] },
+      })
+
+      doc.save(`task-management-report-${new Date().toISOString().split("T")[0]}.pdf`)
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to generate PDF")
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <header className="bg-white shadow">
+        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+          <div className="flex items-center space-x-4">
+            <span className="text-gray-600">Welcome, {user.name}</span>
+            <button
+              onClick={handleLogout}
+              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          {/* Tabs */}
+          <div className="border-b border-gray-200 mb-6">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab("users")}
+                className={`${
+                  activeTab === "users"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+              >
+                User Management
+              </button>
+              <button
+                onClick={() => setActiveTab("tasks")}
+                className={`${
+                  activeTab === "tasks"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+              >
+                Task Management
+              </button>
+            </nav>
+          </div>
+
+          {/* Error Message */}
+          {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
+
+          {/* User Management Tab */}
+          {activeTab === "users" && (
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-lg font-medium mb-4">User Management</h2>
+
+              {loading ? (
+                <div className="text-center py-4">Loading users...</div>
+              ) : users.length === 0 ? (
+                <div className="text-center py-4">No users found.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Email
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Role
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {users.map((user) => (
+                        <tr key={user._id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.role}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => handleEditUser(user)}
+                              className="text-blue-600 hover:text-blue-900 mr-4"
+                            >
+                              Edit
+                            </button>
+                            {user.role !== "admin" && (
+                              <button
+                                onClick={() => handleDeleteUser(user._id)}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Edit User Modal */}
+              {editingUser && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+                  <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                    <h3 className="text-lg font-medium mb-4">Edit User</h3>
+                    <form onSubmit={handleUpdateUser}>
+                      <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2">Name</label>
+                        <input
+                          type="text"
+                          value={editForm.name}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          className="w-full p-2 border rounded-md"
+                          required
+                        />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2">Email</label>
+                        <input
+                          type="email"
+                          value={editForm.email}
+                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                          className="w-full p-2 border rounded-md"
+                          required
+                        />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2">Role</label>
+                        <select
+                          value={editForm.role}
+                          onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                          className="w-full p-2 border rounded-md"
+                        >
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setEditingUser(null)}
+                          className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md text-sm font-medium mr-2"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+                        >
+                          Save Changes
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Task Management Tab */}
+          {activeTab === "tasks" && (
+            <div>
+              <div className="bg-white shadow rounded-lg p-6 mb-6">
+                <h2 className="text-lg font-medium mb-4">Create New Task</h2>
+                <form onSubmit={handleCreateTask}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-700 text-sm font-bold mb-2">Title</label>
+                      <input
+                        type="text"
+                        value={taskForm.title}
+                        onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                        className="w-full p-2 border rounded-md"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-bold mb-2">Deadline</label>
+                      <input
+                        type="date"
+                        value={taskForm.deadline}
+                        onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })}
+                        className="w-full p-2 border rounded-md"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-bold mb-2">Assigned To</label>
+                      <select
+                        value={taskForm.assignedTo}
+                        onChange={(e) => setTaskForm({ ...taskForm, assignedTo: e.target.value })}
+                        className="w-full p-2 border rounded-md"
+                        required
+                      >
+                        <option value="">Select User</option>
+                        {users.map((user) => (
+                          <option key={user._id} value={user._id}>
+                            {user.name} ({user.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-bold mb-2">Status</label>
+                      <select
+                        value={taskForm.status}
+                        onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}
+                        className="w-full p-2 border rounded-md"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-gray-700 text-sm font-bold mb-2">Description</label>
+                      <textarea
+                        value={taskForm.description}
+                        onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
+                        className="w-full p-2 border rounded-md"
+                        rows="3"
+                        required
+                      ></textarea>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <button
+                      type="submit"
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+                    >
+                      Create Task
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="bg-white shadow rounded-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-medium">All Tasks</h2>
+                  <button
+                    onClick={generatePDF}
+                    className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Export PDF
+                  </button>
+                </div>
+
+                {/* Search and Filter Controls */}
+                <div className="flex flex-col md:flex-row gap-4 mb-6">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder="Search tasks..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full p-2 border rounded-md"
+                    />
+                  </div>
+
+                  <div>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="p-2 border rounded-md"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="in-progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="text-center py-4">Loading tasks...</div>
+                ) : tasks.length === 0 ? (
+                  <div className="text-center py-4">No tasks found.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Title
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Description
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Deadline
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Assigned To
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {tasks.map((task) => (
+                          <tr key={task._id}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {task.title}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{task.description}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {new Date(task.deadline).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {task.assignedTo?.name || "N/A"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                ${
+                                  task.status === "completed"
+                                    ? "bg-green-100 text-green-800"
+                                    : task.status === "in-progress"
+                                      ? "bg-yellow-100 text-yellow-800"
+                                      : task.status === "cancelled"
+                                        ? "bg-red-100 text-red-800"
+                                        : "bg-gray-100 text-gray-800"
+                                }`}
+                              >
+                                {task.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button
+                                onClick={() => handleDeleteTask(task._id)}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export default AdminDashboard
