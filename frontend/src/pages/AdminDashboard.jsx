@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import axios from "axios"
 import jsPDF from "jspdf"
@@ -13,14 +13,23 @@ const AdminDashboard = () => {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
   const [activeTab, setActiveTab] = useState("users")
   const [editingUser, setEditingUser] = useState(null)
+  const [editingTask, setEditingTask] = useState(null)
   const [editForm, setEditForm] = useState({
     name: "",
     email: "",
     role: "user",
   })
   const [taskForm, setTaskForm] = useState({
+    title: "",
+    description: "",
+    deadline: "",
+    assignedTo: "",
+    status: "pending",
+  })
+  const [editTaskForm, setEditTaskForm] = useState({
     title: "",
     description: "",
     deadline: "",
@@ -34,6 +43,10 @@ const AdminDashboard = () => {
     itemId: null,
     itemType: null,
   })
+  const [profileImage, setProfileImage] = useState(user.profilePicture || "")
+  const [imageFile, setImageFile] = useState(null)
+  const fileInputRef = useRef(null)
+  const [showProfileSection, setShowProfileSection] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -56,6 +69,7 @@ const AdminDashboard = () => {
 
       const userData = response.data.data.user
       setUser(userData)
+      setProfileImage(userData.profilePicture || "")
       localStorage.setItem("user", JSON.stringify(userData))
     } catch (err) {
       console.error("Failed to fetch user profile:", err)
@@ -124,6 +138,33 @@ const AdminDashboard = () => {
       fetchUsers()
     } catch (err) {
       setError(err.response?.data?.message || "Failed to update user")
+    }
+  }
+
+  const handleEditTask = (task) => {
+    setEditingTask(task)
+    setEditTaskForm({
+      title: task.title,
+      description: task.description,
+      deadline: new Date(task.deadline).toISOString().split("T")[0],
+      assignedTo: task.assignedTo?._id || "",
+      status: task.status,
+    })
+  }
+
+  const handleUpdateTask = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem("token")
+
+      await axios.patch(`http://localhost:5000/api/tasks/${editingTask._id}`, editTaskForm, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      setEditingTask(null)
+      fetchTasks()
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update task")
     }
   }
 
@@ -204,6 +245,61 @@ const AdminDashboard = () => {
     }
   }
 
+  const handleImageClick = () => {
+    fileInputRef.current.click()
+  }
+
+  const handleImageChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      setImageFile(file)
+
+      // Preview the image
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setProfileImage(event.target.result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleProfileUpdate = async () => {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem("token")
+
+      // If there's a new profile image, upload it
+      if (imageFile) {
+        const formData = new FormData()
+        formData.append("profileImage", imageFile)
+
+        const imageResponse = await axios.post("http://localhost:5000/api/users/upload-profile-picture", formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        })
+
+        // Update the profile picture URL
+        const updatedUser = {
+          ...user,
+          profilePicture: imageResponse.data.data.profilePicture,
+        }
+        setUser(updatedUser)
+        localStorage.setItem("user", JSON.stringify(updatedUser))
+        setSuccess("Profile picture updated successfully")
+
+        // Reset the image file state
+        setImageFile(null)
+      }
+
+      setLoading(false)
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update profile picture")
+      setLoading(false)
+    }
+  }
+
   const generatePDF = async () => {
     try {
       const token = localStorage.getItem("token")
@@ -269,20 +365,21 @@ const AdminDashboard = () => {
           <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
           <div className="flex items-center space-x-4">
             <div className="flex items-center">
-              {user.profilePicture ? (
-                <img
-                  src={user.profilePicture || "/placeholder.svg"}
-                  alt="Profile"
-                  className="h-8 w-8 rounded-full mr-2 object-cover"
-                />
-              ) : (
-                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center mr-2">
-                  <span className="text-sm font-medium text-gray-600">
-                    {user.name ? user.name.charAt(0).toUpperCase() : "A"}
-                  </span>
-                </div>
-              )}
-              <Link to="/profile" className="text-gray-600 hover:text-gray-900">
+              <div
+                className="h-8 w-8 rounded-full overflow-hidden cursor-pointer"
+                onClick={() => setShowProfileSection(!showProfileSection)}
+              >
+                {profileImage ? (
+                  <img src={profileImage || "/placeholder.svg"} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full bg-gray-300 flex items-center justify-center">
+                    <span className="text-sm font-medium text-gray-600">
+                      {user.name ? user.name.charAt(0).toUpperCase() : "A"}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <Link to="/profile" className="text-gray-600 hover:text-gray-900 ml-2">
                 {user.name}
               </Link>
             </div>
@@ -295,6 +392,106 @@ const AdminDashboard = () => {
           </div>
         </div>
       </header>
+
+      {/* Profile Section */}
+      {showProfileSection && (
+        <div className="max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8">
+          <div className="bg-white shadow rounded-lg p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium">Admin Profile</h2>
+              <Link to="/profile" className="text-blue-500 hover:text-blue-700 text-sm">
+                View Full Profile
+              </Link>
+            </div>
+
+            {error && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>
+            )}
+            {success && (
+              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                {success}
+              </div>
+            )}
+
+            <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+              <div className="flex flex-col items-center">
+                <div
+                  className="w-32 h-32 rounded-full bg-gray-200 overflow-hidden cursor-pointer mb-4 relative"
+                  onClick={handleImageClick}
+                >
+                  {profileImage ? (
+                    <img
+                      src={profileImage || "/placeholder.svg"}
+                      alt="Profile"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-500">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-16 w-16"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 flex items-center justify-center transition-all">
+                    <span className="text-white opacity-0 hover:opacity-100">Change Photo</span>
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageChange}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={handleImageClick}
+                  className="text-blue-500 hover:text-blue-700 text-sm mb-2"
+                >
+                  Upload New Photo
+                </button>
+                {imageFile && (
+                  <button
+                    onClick={handleProfileUpdate}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+                    disabled={loading}
+                  >
+                    {loading ? "Saving..." : "Save Photo"}
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                    <p className="text-gray-900 font-medium">{user.name}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <p className="text-gray-900">{user.email}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <p className="text-gray-900 capitalize">{user.role}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
@@ -325,7 +522,9 @@ const AdminDashboard = () => {
           </div>
 
           {/* Error Message */}
-          {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
+          {error && !showProfileSection && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>
+          )}
 
           {/* User Management Tab */}
           {activeTab === "users" && (
@@ -403,7 +602,7 @@ const AdminDashboard = () => {
 
               {/* Edit User Modal */}
               {editingUser && (
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
                   <div className="bg-white rounded-lg p-6 w-full max-w-md">
                     <h3 className="text-lg font-medium mb-4">Edit User</h3>
                     <form onSubmit={handleUpdateUser}>
@@ -643,16 +842,12 @@ const AdminDashboard = () => {
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <select
-                                value={task.status}
-                                onChange={(e) => handleTaskStatusChange(task._id, e.target.value)}
-                                className="p-1 border rounded-md text-sm mr-2"
+                              <button
+                                onClick={() => handleEditTask(task)}
+                                className="text-blue-600 hover:text-blue-900 mr-2"
                               >
-                                <option value="pending">Pending</option>
-                                <option value="cancelled">Cancelled</option>
-                                {task.status === "in-progress" && <option value="in-progress">In Progress</option>}
-                                {task.status === "completed" && <option value="completed">Completed</option>}
-                              </select>
+                                Edit
+                              </button>
                               <button
                                 onClick={() => openDeleteModal(task._id, "task")}
                                 className="text-red-600 hover:text-red-900"
@@ -671,6 +866,95 @@ const AdminDashboard = () => {
           )}
         </div>
       </main>
+
+      {/* Edit Task Modal */}
+      {editingTask && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+            <h3 className="text-lg font-medium mb-4">Edit Task</h3>
+            <form onSubmit={handleUpdateTask}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">Title</label>
+                  <input
+                    type="text"
+                    value={editTaskForm.title}
+                    onChange={(e) => setEditTaskForm({ ...editTaskForm, title: e.target.value })}
+                    className="w-full p-2 border rounded-md"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">Deadline</label>
+                  <input
+                    type="date"
+                    value={editTaskForm.deadline}
+                    onChange={(e) => setEditTaskForm({ ...editTaskForm, deadline: e.target.value })}
+                    className="w-full p-2 border rounded-md"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">Assigned To</label>
+                  <select
+                    value={editTaskForm.assignedTo}
+                    onChange={(e) => setEditTaskForm({ ...editTaskForm, assignedTo: e.target.value })}
+                    className="w-full p-2 border rounded-md"
+                    required
+                  >
+                    <option value="">Select User</option>
+                    {users
+                      .filter((u) => u.role === "user")
+                      .map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">Status</label>
+                  <select
+                    value={editTaskForm.status}
+                    onChange={(e) => setEditTaskForm({ ...editTaskForm, status: e.target.value })}
+                    className="w-full p-2 border rounded-md"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-2">Description</label>
+                  <textarea
+                    value={editTaskForm.description}
+                    onChange={(e) => setEditTaskForm({ ...editTaskForm, description: e.target.value })}
+                    className="w-full p-2 border rounded-md"
+                    rows="3"
+                    required
+                  ></textarea>
+                </div>
+              </div>
+              <div className="flex justify-end mt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingTask(null)}
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md text-sm font-medium mr-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal
